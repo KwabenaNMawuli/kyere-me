@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kyere Me — Turn any PDF into a quiz</title>
+<meta name="description" content="Upload a PDF and let AI generate an interactive multiple-choice quiz from it." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M10 12h12M10 16h12M10 20h7' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='23.5' cy='23.5' r='5.5' fill='%2322c55e'/%3E%3Cpath d='M21 23.5l1.7 1.7L26 21.8' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M10 12h12M10 16h12M10 20h7" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </span>
+      <span class="brand-name">Kyere Me</span>
+    </div>
+    <button id="api-key-btn" class="btn btn-ghost btn-sm" type="button" aria-haspopup="dialog" aria-controls="api-key-modal">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 7a4 4 0 1 1-4 4M9.5 14.5 4 20m0 0v-3m0 3h3M13 9l6.5-6.5M17 3l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="api-key-btn-label">Add API key</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="container">
+
+  <!-- ============ UPLOAD SCREEN ============ -->
+  <section id="screen-upload" class="screen" aria-labelledby="upload-heading">
+    <div class="hero">
+      <h1 id="upload-heading">Turn any PDF into a quiz</h1>
+      <p class="subtitle">Upload lecture notes, a textbook chapter, or any study document. AI reads it and builds an interactive multiple-choice quiz in seconds.</p>
+    </div>
+
+    <div id="api-key-banner" class="banner banner-info" role="note" hidden>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Add your free Gemini API key to get started.</span>
+      <button type="button" class="link-btn" data-open-api-modal>Add key</button>
+    </div>
+
+    <form id="upload-form" novalidate>
+      <label id="dropzone" for="pdf-input" class="dropzone">
+        <input type="file" id="pdf-input" name="pdf" accept="application/pdf,.pdf" class="visually-hidden" />
+        <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <path d="M14 6h14l8 8v24a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M28 6v8h8" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M24 22v12M24 22l-4.5 4.5M24 22l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="dropzone-title">Drop your PDF here</span>
+        <span class="dropzone-sub">or click to browse · max 10MB</span>
+      </label>
+
+      <div id="file-chip" class="file-chip" hidden>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span id="file-chip-name" class="file-chip-name"></span>
+        <span id="file-chip-size" class="file-chip-size"></span>
+        <button type="button" id="file-chip-remove" class="file-chip-remove" aria-label="Remove selected file">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <p id="file-error" class="field-error" role="alert" hidden></p>
+
+      <fieldset class="options-row">
+        <legend class="options-label">Number of questions</legend>
+        <div class="segmented" role="radiogroup" aria-label="Number of questions">
+          <input type="radio" name="qcount" id="qc-5" value="5" checked />
+          <label for="qc-5">5</label>
+          <input type="radio" name="qcount" id="qc-10" value="10" />
+          <label for="qc-10">10</label>
+          <input type="radio" name="qcount" id="qc-15" value="15" />
+          <label for="qc-15">15</label>
+          <input type="radio" name="qcount" id="qc-20" value="20" />
+          <label for="qc-20">20</label>
+        </div>
+      </fieldset>
+
+      <button type="submit" id="generate-btn" class="btn btn-primary btn-lg btn-block" disabled>
+        Generate quiz
+      </button>
+    </form>
+  </section>
+
+  <!-- ============ LOADING SCREEN ============ -->
+  <section id="screen-loading" class="screen" hidden aria-labelledby="loading-heading">
+    <div class="loading-panel" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2 id="loading-heading" class="loading-title">Building your quiz</h2>
+      <ul class="steps">
+        <li id="step-read" class="step">
+          <span class="step-dot" aria-hidden="true"></span>
+          <span class="step-text">Reading your PDF</span>
+        </li>
+        <li id="step-generate" class="step">
+          <span class="step-dot" aria-hidden="true"></span>
+          <span class="step-text">Generating questions with AI</span>
+        </li>
+      </ul>
+      <button type="button" id="cancel-btn" class="btn btn-ghost btn-sm">Cancel</button>
+    </div>
+  </section>
+
+  <!-- ============ ERROR SCREEN ============ -->
+  <section id="screen-error" class="screen" hidden aria-labelledby="error-heading">
+    <div class="error-panel" role="alert">
+      <svg class="error-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <h2 id="error-heading">Something went wrong</h2>
+      <p id="error-message" class="error-message"></p>
+      <button type="button" id="error-retry-btn" class="btn btn-primary">Try again</button>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ SCREEN ============ -->
+  <section id="screen-quiz" class="screen" hidden aria-labelledby="quiz-heading">
+    <div class="quiz-header">
+      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="quiz-progressbar">
+        <div id="quiz-progress-fill" class="progress-fill"></div>
+      </div>
+      <p id="quiz-position" class="quiz-position">Question 1 of 5</p>
+    </div>
+
+    <h2 id="quiz-heading" class="visually-hidden">Quiz question</h2>
+    <div id="question-card" class="question-card">
+      <p id="question-text" class="question-text"></p>
+      <div id="options-list" class="options-list" role="radiogroup" aria-labelledby="question-text"></div>
+    </div>
+
+    <div class="quiz-nav">
+      <button type="button" id="prev-btn" class="btn btn-ghost" disabled>Previous</button>
+      <button type="button" id="next-btn" class="btn btn-primary" disabled>Next</button>
+      <button type="button" id="submit-btn" class="btn btn-primary" hidden>Submit quiz</button>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS SCREEN ============ -->
+  <section id="screen-results" class="screen" hidden aria-labelledby="results-heading">
+    <div class="results-summary">
+      <div class="score-ring" id="score-ring" aria-hidden="true">
+        <svg viewBox="0 0 120 120">
+          <circle class="score-ring-track" cx="60" cy="60" r="52" />
+          <circle class="score-ring-fill" id="score-ring-fill" cx="60" cy="60" r="52" />
+        </svg>
+        <span id="score-percent" class="score-percent"></span>
+      </div>
+      <h2 id="results-heading">Quiz complete</h2>
+      <p id="score-text" class="score-text"></p>
+      <button type="button" id="restart-btn" class="btn btn-primary btn-lg">Try another PDF</button>
+    </div>
+
+    <h3 class="review-heading">Review your answers</h3>
+    <ol id="review-list" class="review-list"></ol>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>Your API key and PDF stay in your browser — nothing is stored on a server.</p>
+  </div>
+</footer>
+
+<!-- ============ API KEY MODAL ============ -->
+<div id="api-key-modal" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="api-key-modal-title">
+    <div class="modal-header">
+      <h2 id="api-key-modal-title">Gemini API key</h2>
+      <button type="button" id="api-key-modal-close" class="icon-btn" aria-label="Close dialog">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Kyere Me uses Google's Gemini API to read your PDF and write quiz questions. You'll need a free API key from Google AI Studio.</p>
+      <ol class="modal-steps">
+        <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/app/apikey</a></li>
+        <li>Sign in and click "Create API key"</li>
+        <li>Copy the key and paste it below</li>
+      </ol>
+      <label for="api-key-input" class="input-label">API key</label>
+      <div class="key-input-row">
+        <input type="password" id="api-key-input" class="text-input" placeholder="AIza..." autocomplete="off" spellcheck="false" />
+        <button type="button" id="api-key-toggle" class="icon-btn" aria-label="Show API key">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
+      </div>
+      <p class="input-hint">Stored only in this browser's local storage. Never sent anywhere except Google's API.</p>
+      <p id="api-key-error" class="field-error" role="alert" hidden></p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="api-key-clear-btn" class="btn btn-ghost">Remove key</button>
+      <button type="button" id="api-key-save-btn" class="btn btn-primary">Save key</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/pdf.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
