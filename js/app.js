@@ -524,6 +524,8 @@
     });
 
     prevBtn.disabled = currentIndex === 0;
+    nextBtn.disabled = false;
+    submitBtn.disabled = false;
     const isLast = currentIndex === total - 1;
     nextBtn.hidden = isLast;
     submitBtn.hidden = !isLast;
