@@ -3,8 +3,12 @@
 
   const STORAGE_KEY = 'kyereme_gemini_api_key';
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-  const MAX_TEXT_CHARS = 600000; // safety margin within gemini-2.5-flash's context window
-  const GEMINI_MODEL = 'gemini-2.5-flash';
+  const MAX_TEXT_CHARS = 600000; // safety margin within the model's context window
+  const GEMINI_MODEL = 'gemini-3.6-flash';
+  const MIN_QUESTIONS = 1;
+  const MAX_QUESTIONS = 500;
+  const BATCH_SIZE = 25; // questions per API call; keeps each response well under the output token ceiling
+  const BATCH_DELAY_MS = 4300; // paces sequential calls under Gemini free-tier's 15 requests/minute
   const SCORE_RING_CIRCUMFERENCE = 326.7; // 2 * PI * r(52), matches css stroke-dasharray
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
@@ -38,9 +42,12 @@
   const fileChipRemove = document.getElementById('file-chip-remove');
   const fileErrorEl = document.getElementById('file-error');
   const generateBtn = document.getElementById('generate-btn');
+  const qcountInput = document.getElementById('qcount-input');
+  const qcountChips = Array.from(document.querySelectorAll('.qcount-chip'));
 
   const stepRead = document.getElementById('step-read');
   const stepGenerate = document.getElementById('step-generate');
+  const generateProgressText = document.getElementById('generate-progress-text');
   const cancelBtn = document.getElementById('cancel-btn');
 
   const errorMessageEl = document.getElementById('error-message');
@@ -209,6 +216,30 @@
     if (file) selectFile(file);
   });
 
+  // ---------- Question count ----------
+  function getQuestionCount() {
+    const n = Math.round(Number(qcountInput.value));
+    if (!Number.isFinite(n)) return 10;
+    return Math.min(MAX_QUESTIONS, Math.max(MIN_QUESTIONS, n));
+  }
+
+  function syncActiveChip() {
+    const current = String(getQuestionCount());
+    qcountChips.forEach((chip) => chip.classList.toggle('is-active', chip.dataset.qcount === current));
+  }
+
+  qcountChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      qcountInput.value = chip.dataset.qcount;
+      syncActiveChip();
+    });
+  });
+  qcountInput.addEventListener('input', syncActiveChip);
+  qcountInput.addEventListener('blur', () => {
+    qcountInput.value = String(getQuestionCount());
+    syncActiveChip();
+  });
+
   // ---------- PDF text extraction ----------
   async function extractTextFromPDF(file) {
     const arrayBuffer = await file.arrayBuffer();
@@ -238,8 +269,8 @@
     },
   };
 
-  function buildPrompt(text, count) {
-    return [
+  function buildPrompt(text, count, priorQuestions) {
+    const lines = [
       `You are an expert quiz writer. Based ONLY on the study material below, write exactly ${count} multiple-choice questions that test understanding of the key concepts.`,
       '',
       'Rules:',
@@ -250,23 +281,38 @@
       '- Vary difficulty and avoid trivial copy-paste wording.',
       '- "explanation" briefly justifies the correct answer using the material.',
       '- Respond with ONLY the JSON array. No markdown, no extra commentary.',
-      '',
-      'STUDY MATERIAL:',
-      '"""',
-      text,
-      '"""',
-    ].join('\n');
+    ];
+    if (priorQuestions && priorQuestions.length) {
+      lines.push(
+        '',
+        'These questions have already been used in this quiz — do not repeat them or ask close variations of them:',
+        ...priorQuestions.map((q) => `- ${q}`),
+      );
+    }
+    lines.push('', 'STUDY MATERIAL:', '"""', text, '"""');
+    return lines.join('\n');
   }
 
-  async function generateQuiz(text, count, signal) {
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        }, { once: true });
+      }
+    });
+  }
+
+  async function generateQuizBatch(text, count, priorQuestions, signal) {
     const apiKey = getApiKey();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const body = {
-      contents: [{ parts: [{ text: buildPrompt(text, count) }] }],
+      contents: [{ parts: [{ text: buildPrompt(text, count, priorQuestions) }] }],
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: QUIZ_SCHEMA,
-        temperature: 0.4,
       },
     };
 
@@ -331,6 +377,50 @@
     return cleaned;
   }
 
+  async function generateFullQuiz(text, totalCount, signal, onProgress) {
+    const results = [];
+    const seen = new Set();
+    const batchCount = Math.ceil(totalCount / BATCH_SIZE);
+    let lastError = null;
+
+    for (let i = 0; i < batchCount; i++) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      const remaining = totalCount - results.length;
+      if (remaining <= 0) break;
+      const thisBatchSize = Math.min(BATCH_SIZE, remaining);
+
+      onProgress({ batchNumber: i + 1, totalBatches: batchCount, generated: results.length, total: totalCount });
+
+      try {
+        const priorQuestions = results.map((q) => q.question);
+        const batch = await generateQuizBatch(text, thisBatchSize, priorQuestions, signal);
+        for (const q of batch) {
+          const key = q.question.trim().toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            results.push(q);
+          }
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        lastError = err;
+        break;
+      }
+
+      if (i < batchCount - 1 && results.length < totalCount) {
+        onProgress({ batchNumber: i + 1, totalBatches: batchCount, generated: results.length, total: totalCount, waiting: true });
+        await sleep(BATCH_DELAY_MS, signal);
+      }
+    }
+
+    if (results.length === 0) {
+      throw lastError || new Error('No questions could be generated. Please try again.');
+    }
+
+    return results;
+  }
+
   // ---------- Loading steps ----------
   function setStepState(step, state) {
     step.classList.remove('active', 'done');
@@ -343,13 +433,13 @@
     if (!selectedFile) { setFileError('Please choose a PDF file.'); return; }
     if (!getApiKey()) { openApiKeyModal(); return; }
 
-    const checked = uploadForm.querySelector('input[name="qcount"]:checked');
-    const count = Number(checked ? checked.value : 5);
+    const count = getQuestionCount();
 
     abortController = new AbortController();
     showScreen('loading');
     setStepState(stepRead, 'active');
     setStepState(stepGenerate, null);
+    generateProgressText.hidden = true;
 
     try {
       const text = await extractTextFromPDF(selectedFile);
@@ -361,7 +451,7 @@
       setStepState(stepGenerate, 'active');
 
       const truncated = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text;
-      const quiz = await generateQuiz(truncated, count, abortController.signal);
+      const quiz = await generateFullQuiz(truncated, count, abortController.signal, updateGenerateProgress);
 
       setStepState(stepGenerate, 'done');
       startQuiz(quiz);
@@ -372,6 +462,14 @@
       }
       showError(err.message || 'Something went wrong. Please try again.');
     }
+  }
+
+  function updateGenerateProgress({ batchNumber, totalBatches, generated, total, waiting }) {
+    if (totalBatches <= 1) { generateProgressText.hidden = true; return; }
+    generateProgressText.hidden = false;
+    generateProgressText.textContent = waiting
+      ? `${generated} of ${total} generated so far — pacing requests to stay within the API's rate limit…`
+      : `Batch ${batchNumber} of ${totalBatches} — ${generated} of ${total} questions generated so far`;
   }
 
   function showError(message) {
@@ -495,4 +593,5 @@
 
   // ---------- Init ----------
   refreshApiKeyUI();
+  syncActiveChip();
 })();

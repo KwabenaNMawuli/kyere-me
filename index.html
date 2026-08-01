@@ -70,16 +70,21 @@
 
       <fieldset class="options-row">
         <legend class="options-label">Number of questions</legend>
-        <div class="segmented" role="radiogroup" aria-label="Number of questions">
-          <input type="radio" name="qcount" id="qc-5" value="5" checked />
-          <label for="qc-5">5</label>
-          <input type="radio" name="qcount" id="qc-10" value="10" />
-          <label for="qc-10">10</label>
-          <input type="radio" name="qcount" id="qc-15" value="15" />
-          <label for="qc-15">15</label>
-          <input type="radio" name="qcount" id="qc-20" value="20" />
-          <label for="qc-20">20</label>
+        <div class="qcount-presets" role="group" aria-label="Quick pick question count">
+          <button type="button" class="qcount-chip" data-qcount="5">5</button>
+          <button type="button" class="qcount-chip is-active" data-qcount="10">10</button>
+          <button type="button" class="qcount-chip" data-qcount="25">25</button>
+          <button type="button" class="qcount-chip" data-qcount="50">50</button>
+          <button type="button" class="qcount-chip" data-qcount="100">100</button>
+          <button type="button" class="qcount-chip" data-qcount="250">250</button>
+          <button type="button" class="qcount-chip" data-qcount="500">500</button>
         </div>
+        <div class="qcount-input-row">
+          <label for="qcount-input" class="visually-hidden">Exact number of questions</label>
+          <input type="number" id="qcount-input" class="qcount-input" min="1" max="500" step="1" value="10" inputmode="numeric" />
+          <span class="qcount-suffix">questions (max 500)</span>
+        </div>
+        <p class="input-hint">Large quizzes are generated in batches and take longer &mdash; they work best with longer, content-rich documents.</p>
       </fieldset>
 
       <button type="submit" id="generate-btn" class="btn btn-primary btn-lg btn-block" disabled>
@@ -103,6 +108,7 @@
           <span class="step-text">Generating questions with AI</span>
         </li>
       </ul>
+      <p id="generate-progress-text" class="progress-detail" hidden></p>
       <button type="button" id="cancel-btn" class="btn btn-ghost btn-sm">Cancel</button>
     </div>
   </section>
